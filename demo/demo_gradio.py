@@ -183,10 +183,9 @@ def create_temp_session_dir():
     os.makedirs(temp_dir, exist_ok=True)
     return temp_dir, session_id
 
-def parse_image_with_high_level_api(parser, image, prompt, fitz_preprocess=False):
+def parse_image_with_high_level_api(parser, image, prompt_mode, fitz_preprocess=False):
     """
-    Processes using the high-level API parse_image from DotsOCRParser.
-    The prompt parameter should be the actual prompt content, not just the mode.
+    Processes using the high-level API parse_image from DotsOCRParser
     """
     # Create a temporary session directory
     temp_dir, session_id = create_temp_session_dir()
@@ -202,7 +201,7 @@ def parse_image_with_high_level_api(parser, image, prompt, fitz_preprocess=False
             # input_path=temp_image_path,
             input_path=image,
             filename=filename, 
-            prompt_mode=prompt,
+            prompt_mode=prompt_mode,
             save_dir=temp_dir,
             fitz_preprocess=fitz_preprocess
         )
@@ -257,10 +256,9 @@ def parse_image_with_high_level_api(parser, image, prompt, fitz_preprocess=False
             shutil.rmtree(temp_dir, ignore_errors=True)
         raise e
 
-def parse_pdf_with_high_level_api(parser, pdf_path, prompt):
+def parse_pdf_with_high_level_api(parser, pdf_path, prompt_mode):
     """
-    Processes using the high-level API parse_pdf from DotsOCRParser.
-    The prompt parameter should be the actual prompt content, not just the mode.
+    Processes using the high-level API parse_pdf from DotsOCRParser
     """
     # Create a temporary session directory
     temp_dir, session_id = create_temp_session_dir()
@@ -271,7 +269,7 @@ def parse_pdf_with_high_level_api(parser, pdf_path, prompt):
         results = parser.parse_pdf(
             input_path=pdf_path,
             filename=filename,
-            prompt_mode=prompt,
+            prompt_mode=prompt_mode,
             save_dir=temp_dir
         )
         
@@ -339,14 +337,9 @@ def parse_pdf_with_high_level_api(parser, pdf_path, prompt):
 # ==================== Core Processing Function ====================
 def process_image_inference(test_image_input, file_input,
                           prompt_mode, server_ip, server_port, min_pixels, max_pixels,
-                          fitz_preprocess=False, custom_prompt=""
+                          fitz_preprocess=False
                           ):
-    """
-    Main function to handle image/PDF inference.
-    If custom_prompt is provided and not empty, use it as the prompt;
-    otherwise, use the selected prompt_mode from the dropdown.
-    This logic applies to both image and PDF inference.
-    """
+    """Core function to handle image/PDF inference"""
     global current_config, processing_results, dots_parser, pdf_cache
     
     # First, clean up previous processing results to avoid confusion with the download button
@@ -384,43 +377,40 @@ def process_image_inference(test_image_input, file_input,
     dots_parser.min_pixels = min_pixels
     dots_parser.max_pixels = max_pixels
     
-    # Always determine the final prompt to use
-    if custom_prompt and custom_prompt.strip():
-        final_prompt = custom_prompt.strip()
-    else:
-        final_prompt = dict_promptmode_to_prompt.get(prompt_mode, prompt_mode)
-    
     # Determine the input source
     input_file_path = None
     image = None
     
-    # File input (PDF or image)
+    # Prioritize file input (supports PDF)
     if file_input is not None:
         input_file_path = file_input
         file_ext = os.path.splitext(input_file_path)[1].lower()
+        
         if file_ext == '.pdf':
-            # Always use final_prompt for PDF
+            # PDF file processing
             try:
-                return process_pdf_file(input_file_path, final_prompt)
+                return process_pdf_file(input_file_path, prompt_mode)
             except Exception as e:
                 return None, f"PDF processing failed: {e}", "", "", gr.update(value=None), None, ""
         elif file_ext in ['.jpg', '.jpeg', '.png']:
-            # Always use final_prompt for image
+            # Image file processing
             try:
                 image = Image.open(input_file_path)
             except Exception as e:
                 return None, f"Failed to read image file: {e}", "", "", gr.update(value=None), None, ""
-    # Test image input (if no file uploaded)
+    
+    # If no file input, check the test image input
     if image is None:
         if test_image_input and test_image_input != "":
             file_ext = os.path.splitext(test_image_input)[1].lower()
             if file_ext == '.pdf':
-                return process_pdf_file(test_image_input, final_prompt)
+                return process_pdf_file(test_image_input, prompt_mode)
             else:
                 try:
                     image = read_image_v2(test_image_input)
                 except Exception as e:
                     return None, f"Failed to read test image: {e}", "", "", gr.update(value=None), gr.update(value=None), None, ""
+    
     if image is None:
         return None, "Please upload image/PDF file or select test image", "", "", gr.update(value=None), None, ""
     
@@ -432,9 +422,9 @@ def process_image_inference(test_image_input, file_input,
         pdf_cache["is_parsed"] = False
         pdf_cache["results"] = []
         
-        # Always use final_prompt for image inference
+        # Process using the high-level API of DotsOCRParser
         original_image = image
-        parse_result = parse_image_with_high_level_api(dots_parser, image, final_prompt, fitz_preprocess)
+        parse_result = parse_image_with_high_level_api(dots_parser, image, prompt_mode, fitz_preprocess)
         
         # Extract parsing results
         layout_image = parse_result['layout_image']
@@ -540,16 +530,16 @@ def process_image_inference(test_image_input, file_input,
     except Exception as e:
         return None, f"Error during processing: {e}", "", "", gr.update(value=None), None, ""
 
-def process_pdf_file(pdf_path, prompt):
-    """
-    Dedicated function for processing PDF files.
-    The prompt parameter should be the actual prompt content, not just the mode.
-    """
+def process_pdf_file(pdf_path, prompt_mode):
+    """Dedicated function for processing PDF files"""
     global pdf_cache, processing_results, dots_parser
     
     try:
-        # Use the prompt directly since it's already processed in process_image_inference
-        pdf_result = parse_pdf_with_high_level_api(dots_parser, pdf_path, prompt)
+        # First, load the PDF for preview
+        preview_image, page_info = load_file_for_preview(pdf_path)
+        
+        # Parse the PDF using DotsOCRParser
+        pdf_result = parse_pdf_with_high_level_api(dots_parser, pdf_path, prompt_mode)
         
         # Update the PDF cache
         pdf_cache["is_parsed"] = True
@@ -768,7 +758,7 @@ def create_gradio_interface():
         """)
         
         with gr.Row():
-            # Left panel: Input and configuration
+            # Left side: Input and Configuration
             with gr.Column(scale=1, elem_id="left-panel"):
                 gr.Markdown("### 📥 Upload & Select")
                 file_input = gr.File(
@@ -792,18 +782,7 @@ def create_gradio_interface():
                     show_label=True
                 )
                 
-                # Add editable custom prompt textbox
-                custom_prompt = gr.Textbox(
-                    label="Custom Prompt (optional)",
-                    value="",
-                    lines=4,
-                    max_lines=8,
-                    interactive=True,
-                    show_copy_button=True,
-                    placeholder="Fill in to override the selected prompt"
-                )
-                
-                # Display current prompt content (read-only)
+                # Display current prompt content
                 prompt_display = gr.Textbox(
                     label="Current Prompt Content",
                     value=dict_promptmode_to_prompt[list(dict_promptmode_to_prompt.keys())[0]],
@@ -933,13 +912,12 @@ def create_gradio_interface():
             show_progress=False
         )
         
-        # Update process button to include custom_prompt as input
         process_btn.click(
             fn=process_image_inference,
             inputs=[
                 test_image_input, file_input,
                 prompt_mode, server_ip, server_port, min_pixels, max_pixels, 
-                fitz_preprocess, custom_prompt
+                fitz_preprocess
             ],
             outputs=[
                 result_image, info_display, md_output, md_raw_output,
