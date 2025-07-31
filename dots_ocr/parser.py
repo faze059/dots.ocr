@@ -64,12 +64,18 @@ class DotsOCRParser:
         return response
 
     def get_prompt(self, prompt_mode, bbox=None, origin_image=None, image=None, min_pixels=None, max_pixels=None):
-        prompt = dict_promptmode_to_prompt[prompt_mode]
-        if prompt_mode == 'prompt_grounding_ocr':
-            assert bbox is not None
-            bboxes = [bbox]
-            bbox = pre_process_bboxes(origin_image, bboxes, input_width=image.width, input_height=image.height, min_pixels=min_pixels, max_pixels=max_pixels)[0]
-            prompt = prompt + str(bbox)
+        # Support both prompt mode (key) and direct prompt content (string)
+        if prompt_mode in dict_promptmode_to_prompt:
+            prompt = dict_promptmode_to_prompt[prompt_mode]
+            # Special handling for grounding OCR mode
+            if prompt_mode == 'prompt_grounding_ocr':
+                assert bbox is not None
+                bboxes = [bbox]
+                bbox = pre_process_bboxes(origin_image, bboxes, input_width=image.width, input_height=image.height, min_pixels=min_pixels, max_pixels=max_pixels)[0]
+                prompt = prompt + str(bbox)
+        else:
+            # Treat as direct prompt content
+            prompt = prompt_mode
         return prompt
 
     # def post_process_results(self, response, prompt_mode, save_dir, save_name, origin_image, image, min_pixels, max_pixels)

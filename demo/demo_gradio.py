@@ -379,11 +379,19 @@ def process_image_inference(test_image_input, file_input,
     dots_parser.min_pixels = min_pixels
     dots_parser.max_pixels = max_pixels
     
+    # Debug: Print input parameters
+    print(f"DEBUG: custom_prompt = '{custom_prompt}'")
+    print(f"DEBUG: prompt_mode = '{prompt_mode}'")
+    
     # Determine the final prompt to use
     if custom_prompt and custom_prompt.strip():
         final_prompt = custom_prompt.strip()
+        print(f"DEBUG: Using custom prompt: '{final_prompt}'")
     else:
         final_prompt = dict_promptmode_to_prompt.get(prompt_mode, prompt_mode)
+        print(f"DEBUG: Using preset prompt: '{final_prompt[:100]}...'")
+    
+    print(f"DEBUG: final_prompt length: {len(final_prompt)}")
     
     # Determine the input source
     input_file_path = None
